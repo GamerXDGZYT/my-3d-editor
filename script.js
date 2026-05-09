@@ -1,6 +1,6 @@
-// Scene setup
 const scene = new THREE.Scene();
 
+// Camera
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
@@ -8,72 +8,116 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 
+// Renderer
 const renderer = new THREE.WebGLRenderer({
   canvas: document.querySelector("#bg"),
+  antialias: true
 });
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Controls (rotate camera)
+// Controls (mouse rotate / zoom)
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
 
-// Light
-const light = new THREE.PointLight(0xffffff);
-light.position.set(10, 10, 10);
+// Lighting
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(10, 15, 10);
 scene.add(light);
 
-// Store objects
-let objects = [];
+// Ambient light for softer look
+scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+// Grid (Roblox Studio style)
+const grid = new THREE.GridHelper(30, 30);
+scene.add(grid);
 
 // Camera position
-camera.position.z = 5;
+camera.position.set(5, 5, 5);
+controls.update();
 
-// Add Cube
-function addCube() {
-  const geometry = new THREE.BoxGeometry();
-  const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
-  const cube = new THREE.Mesh(geometry, material);
+// Storage
+let blocks = [];
 
-  cube.position.x = Math.random() * 4 - 2;
+// Raycasting (click detection)
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
 
-  scene.add(cube);
-  objects.push(cube);
+// Snap to grid (Roblox style)
+function snap(n) {
+  return Math.round(n);
 }
 
-// Add Sphere
-function addSphere() {
-  const geometry = new THREE.SphereGeometry(0.5, 32, 32);
-  const material = new THREE.MeshStandardMaterial({ color: 0xff00aa });
-  const sphere = new THREE.Mesh(geometry, material);
+// Create block
+function createBlock(pos) {
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x00ffcc
+  });
 
-  sphere.position.x = Math.random() * 4 - 2;
+  const block = new THREE.Mesh(geometry, material);
 
-  scene.add(sphere);
-  objects.push(sphere);
+  block.position.set(
+    snap(pos.x),
+    snap(pos.y),
+    snap(pos.z)
+  );
+
+  scene.add(block);
+  blocks.push(block);
 }
 
-// Add Cylinder
-function addCylinder() {
-  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1);
-  const material = new THREE.MeshStandardMaterial({ color: 0x00aaff });
-  const cyl = new THREE.Mesh(geometry, material);
-
-  cyl.position.x = Math.random() * 4 - 2;
-
-  scene.add(cyl);
-  objects.push(cyl);
+// Remove block
+function deleteBlock(obj) {
+  scene.remove(obj);
+  blocks = blocks.filter(b => b !== obj);
 }
 
-// Clear scene
-function clearScene() {
-  objects.forEach(obj => scene.remove(obj));
-  objects = [];
-}
+// Mouse click handler
+window.addEventListener("mousedown", (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-// Animation loop
+  raycaster.setFromCamera(mouse, camera);
+
+  const hits = raycaster.intersectObjects(blocks);
+
+  // RIGHT CLICK = delete
+  if (e.button === 2) {
+    if (hits.length > 0) {
+      deleteBlock(hits[0].object);
+    }
+    return;
+  }
+
+  // LEFT CLICK = place
+  if (hits.length > 0) {
+    const pos = hits[0].object.position.clone();
+    pos.y += 1;
+    createBlock(pos);
+  } else {
+    // place on ground plane
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hitPoint = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, hitPoint);
+
+    createBlock(hitPoint);
+  }
+});
+
+// Disable right-click menu
+window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// Resize fix
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Game loop
 function animate() {
   requestAnimationFrame(animate);
-
   controls.update();
   renderer.render(scene, camera);
 }
